@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    component: kube-controller-manager
+  name: kube-controller-manager
+  namespace: kube-system
+  annotations:
+    prometheus.io/scrape: 'true'
+spec:
+  type: ClusterIP
+  # service is created to allow prometheus to scrape endpoints
+  clusterIP: None
+  selector:
+    component: kube-controller-manager
+  ports:
+    - name: controller-manager
+      protocol: TCP
+      port: 10252
+      targetPort: 10252

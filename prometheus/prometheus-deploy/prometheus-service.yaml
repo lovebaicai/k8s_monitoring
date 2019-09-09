@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+  name: prometheus
+  namespace: monitoring
+spec:
+  #externalTrafficPolicy: Cluster
+  ports:
+  - name: web
+    #nodePort: 30033
+    port: 9090
+    protocol: TCP
+    targetPort: 9090
+  selector:
+    name: prometheus
+    phase: prod
+  sessionAffinity: None
+  #type: NodePort
+status:
+  loadBalancer: {}

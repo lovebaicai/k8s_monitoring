@@ -1,0 +1,91 @@
+kind: ConfigMap
+metadata:
+  namespace: monitoring
+  name: alertmanager-config
+apiVersion: v1
+data:
+  config.yml: |-
+    global:
+      smtp_smarthost: "smtp.mail.org:25"
+      smtp_from: "k8salert@mail.org"
+      smtp_auth_username: "k8salert@mail.org"
+      smtp_auth_password: "password"
+      smtp_require_tls: false
+    templates:
+      - '/etc/alertmanager-templates/*.tmpl'
+    route:
+      receiver: 'email_alert'
+      group_by: ['alertname', 'instance', 'service', 'severity'] # 聚合报警类别
+      group_wait: 10s                                            # 聚合等待时间,超过这个时间开始发送报警
+      group_interval: 1m                                         # 已经存在的group等待group_interval这个时间段看报警问题是否解决
+      repeat_interval: 1m                                        # 再次报警间隔
+      routes:
+      - receiver: 'phone_alert'
+        match:
+          severity: critical                                     # 匹配label
+      - receiver: 'pod_alert'
+        match:
+          type: pod
+      - receiver: 'node_alert'
+        match:
+          type: node
+      - receiver: 'kubernetes_alert'
+        match:
+          type: kuber
+      - receiver: 'etcd_alert'
+        match:
+          type: etcd
+      - receiver: 'prome_alert'
+        match:
+          type: prome
+
+    receivers:
+      - name: 'email_alert'
+        email_configs:
+        - to: 'ops@mail.com'
+          send_resolved: true
+    
+      - name: 'pod_alert'
+        email_configs:
+        - to: 'ops@mail.com'
+          html: '{{ template "pod.html" . }}'
+          headers:
+            Subject: '{{ template  "email.subject" . }}'
+          send_resolved: true
+    
+      - name: 'node_alert'
+        email_configs:
+        - to: 'ops@mail.com'
+          html: '{{ template "node.html" . }}'
+          headers:
+            Subject: '{{ template  "email.subject" . }}'
+          send_resolved: true
+    
+      - name: 'kubernetes_alert'
+        email_configs:
+        - to: 'ops@mail.com'
+          html: '{{ template "kubernetes.html" . }}'
+          headers:
+            Subject: '{{ template  "email.subject" . }}'
+          send_resolved: true
+    
+      - name: 'etcd_alert'
+        email_configs:
+        - to: 'ops@mail.com'
+          html: '{{ template "etcd.html" . }}'
+          headers:
+            Subject: '{{ template  "email.subject" . }}'
+          send_resolved: true
+    
+      - name: 'prome_alert'
+        email_configs:
+        - to: 'ops@mail.com'
+          html: '{{ template "prome.html" . }}'
+          headers:
+            Subject: '{{ template  "email.subject" . }}'
+          send_resolved: true
+
+      - name: 'phone_alert'
+        webhook_configs:
+        - send_resolved: true
+          url: 'http://172.16.33.195:8765/phoneWarn/callUp/v1/prome' 

@@ -1,0 +1,67 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        name: prometheus
+        phase: prod
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        fsGroup: 472
+        runAsUser: 0
+      serviceAccountName: prometheus
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.12.0
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yaml'
+          - "--storage.tsdb.path=/prometheus"
+          - "--storage.tsdb.retention=168h"
+          - "--web.enable-lifecycle"
+        ports:
+        - name: web
+          containerPort: 9090
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+        - name: rules
+          mountPath: /etc/prometheus/rules
+        - name: data
+          mountPath: /prometheus
+        - mountPath: /var/run/secrets/etcd-sercret
+          name: etcd-secret
+        - mountPath: /etc/localtime
+          name: time
+          readOnly: true
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+         prometheus: "true"
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config
+      - name: rules
+        configMap:
+          name: prometheus-rules
+      - name: data
+        hostPath:
+          path: /data/prometheus
+      - name: etcd-secret
+        secret:
+          defaultMode: 511
+          secretName: etcd-certs
+      - hostPath:
+          path: /etc/localtime
+          type: ""
+        name: time

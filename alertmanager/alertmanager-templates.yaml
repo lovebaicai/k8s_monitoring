@@ -1,0 +1,182 @@
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: alertmanager-templates
+  namespace: monitoring
+
+apiVersion: v1
+data:
+  subject.tmpl: |
+    {{ define "email.subject" }}[{{ .Status | reReplaceAll "firing" "Problem" | toUpper }}]:{{ range $i,$value := .CommonLabels }}{{ if eq $i "pod" }}{{ $value }}{{ end }}{{ end }} {{ range $i, $value := .GroupLabels }}{{ if eq $i "alertname" }}{{ $value }}{{ end }}{{ end }} {{ if eq .Status "firing" }}异常{{ else }}已恢复{{ end }}{{ end }}
+  pods.tmpl: |
+    {{ define "pod.html" }}
+    <table>
+        {{ range $i, $alert := .Alerts }}
+            <tr>
+               <td>报警名称: {{ $alert.Labels.alertname }}</td>
+            </tr>
+            <tr>
+               <td>报警时间: {{ $alert.StartsAt }}</td>
+            </tr>
+            {{ if $alert.Labels.alertname | match ".*Error" }}
+                <tr>
+                   <td>报警实例: {{ $alert.Labels.pod }}</td>
+                </tr>
+                <tr>
+                   <td>实例IP: {{ $alert.Labels.instance }}</td>
+                </tr>
+            {{ end }}
+            {{ if $alert.Labels.alertname | match ".*Usage" }}
+                <tr>
+                   <td>报警实例: {{ $alert.Labels.pod_name }}</td>
+                </tr>
+            {{ end }}
+            <tr>
+               <td>命名空间: {{ $alert.Labels.namespace }}</td>
+            </tr>
+            <tr>
+               <td>报警等级: {{ $alert.Labels.severity }}</td>
+            </tr>
+            <!--<tr>
+               <td>异常原因: {{ $alert.Labels.reason }}</td>
+            </tr>-->
+            <tr>
+               <td>报警状态: {{ $alert.Status | reReplaceAll "firing" "Problem" | toUpper }}</td>
+            </tr>
+            <tr>
+               <td>报警信息: {{ $alert.Annotations.description }}</td>
+            </tr>
+        {{ end }}
+    </table>
+    {{ end }}
+  node.tmpl: |
+    {{ define "node.html" }}
+    <table>
+       {{ range $i, $alert := .Alerts }}
+           <tr>
+              <td>报警名称: {{ $alert.Labels.alertname }}</td>
+           </tr>
+           <tr>
+              <td>报警时间: {{ $alert.StartsAt }}</td>
+           </tr>
+           <tr>
+              <td>报警主机: {{ $alert.Labels.node }}</td>
+           </tr>
+           <tr>
+              <td>主机IP: {{ $alert.Labels.instance | reReplaceAll ":.*" "" }}</td>
+           </tr>
+           <tr>
+              <td>报警等级: {{ $alert.Labels.severity }}</td>
+           </tr>
+           <tr>
+              <td>报警状态: {{ $alert.Status | reReplaceAll "firing" "Problem" | toUpper }}</td>
+           </tr>
+           <tr>
+              <td>报警信息: {{ $alert.Annotations.description }}</td>
+           </tr>
+       {{ end }}
+    </table>
+    {{ end }}
+  etcd.tmpl: |
+    {{ define "etcd.html" }}
+    <table>
+       {{ range $i, $alert := .Alerts }}
+           <tr>
+              <td>报警名称: {{ $alert.Labels.alertname }}</td>
+           </tr>
+           <tr>
+              <td>报警时间: {{ $alert.StartsAt }}</td>
+           </tr>
+           <tr>
+              <td>报警服务: {{ $alert.Labels.job }}</td>
+           </tr>
+           <tr>
+              <td>实例IP: {{ $alert.Labels.instance | reReplaceAll ":.*" ""}}</td>
+           </tr>
+           <tr>
+              <td>报警等级: {{ $alert.Labels.severity }}</td>
+           </tr>
+           <tr>
+              <td>报警状态: {{ $alert.Status | reReplaceAll "firing" "Problem" | toUpper }}</td>
+           </tr>
+           <tr>
+              <td>报警信息: {{ $alert.Annotations.description }}</td>
+           </tr>
+       {{ end }}
+    </table>
+    {{ end }}
+  kubernetes.tmpl: |
+    {{ define "kubernetes.html" }}
+    <table>
+       {{ range $i, $alert := .Alerts }}
+           <tr>
+              <td>报警名称: {{ $alert.Labels.alertname }}</td>
+           </tr>
+           <tr>
+              <td>报警时间: {{ $alert.StartsAt }}</td>
+           </tr>
+           <tr>
+              <td>报警服务: {{ $alert.Labels.alertname | reReplaceAll "Down" "" }}</td>
+           </tr>
+           <tr>
+              <td>报警等级: {{ $alert.Labels.severity }}</td>
+           </tr>
+           <tr>
+              <td>报警状态: {{ $alert.Status | reReplaceAll "firing" "Problem" | toUpper }}</td>
+           </tr>
+           <tr>
+              <td>报警信息: {{ $alert.Annotations.description }}</td>
+           </tr>
+       {{ end }}
+    </table>
+    {{ end }}
+  prometheus.tmpl: |
+    {{ define "prome.html" }}
+    <table>
+       {{ range $i, $alert := .Alerts }}
+           <tr>
+              <td>报警名称: {{ $alert.Labels.alertname }}</td>
+           </tr>
+           <tr>
+              <td>报警时间: {{ $alert.StartsAt }}</td>
+           </tr>
+           <tr>
+              <td>报警服务: {{ $alert.Labels.job }}</td>
+           </tr>
+           <tr>
+              <td>报警等级: {{ $alert.Labels.severity }}</td>
+           </tr>
+           <tr>
+              <td>报警状态: {{ $alert.Status | reReplaceAll "firing" "Problem" | toUpper }}</td>
+           </tr>
+           <tr>
+              <td>报警信息: {{ $alert.Annotations.description }}</td>
+           </tr>
+       {{ end }}
+    </table>
+    {{ end }}
+  ingress.tmpl: |
+    {{ define "ingress.html" }}
+    <table>
+       {{ range $i, $alert := .Alerts }}
+           <tr>
+              <td>报警名称: {{ $alert.Labels.alertname }}</td>
+           </tr>
+           <tr>
+              <td>报警时间: {{ $alert.StartsAt }}</td>
+           </tr>
+           <tr>
+              <td>报警实例: {{ $alert.Labels.ingress }}</td>
+           </tr>
+           <tr>
+              <td>报警等级: {{ $alert.Labels.severity }}</td>
+           </tr>
+           <tr>
+              <td>报警状态: {{ $alert.Status | reReplaceAll "firing" "Problem" | toUpper }}</td>
+           </tr>
+           <tr>
+              <td>报警信息: {{ $alert.Annotations.description }}</td>
+           </tr>
+       {{ end }}
+    </table>
+    {{ end }}

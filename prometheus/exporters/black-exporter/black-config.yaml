@@ -1,0 +1,27 @@
+apiVersion: v1
+data:
+  blackbox.yml: |
+    modules:
+      http:
+        prober: http
+        http:
+          valid_http_versions: ["HTTP/1.1", "HTTP/2"] # Accepted HTTP versions for this probe.
+          valid_status_codes: [200, 302, 403]              # Accepted status codes for this probe. Defaults to 2xx.
+          no_follow_redirects: true                   # Whether or not the probe will follow any redirects.
+      http_post:
+        prober: http
+        http:
+          method: POST
+      tcp_connect:
+        prober: tcp
+      dns: 
+        prober: dns
+        dns:
+          transport_protocol: "tcp"
+          preferred_ip_protocol: "ip4"
+          query_name: "baidu.com"  # 利用这个域名来检查 dns 服务器
+          #query_type: "A"  # 如果是 kube-dns ，一定要加入这个
+kind: ConfigMap
+metadata:
+  name: blackbox
+  namespace: monitoring

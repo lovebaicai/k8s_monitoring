@@ -1,0 +1,318 @@
+# promethues 报警规则
+# 参考: https://prometheus.io/docs/prometheus/latest/getting_started/
+# 配置定义：
+  # alert：告警规则的名称
+  # expr：基于PromQL表达式告警触发条件，用于计算是否有时间序列满足该条件
+  # for：评估等待时间，可选参数。用于表示只有当触发条件持续一段时间后才发送告警。在等待期间新产生告警的状态为pending
+  # labels：自定义标签，允许用户指定要附加到告警上的一组附加标签(此处定义报警等级+邮件发送匹配label)
+  # annotations：用于指定一组附加信息，比如用于描述告警详细信息的文字等，annotations的内容在告警产生时会一同作为参数发送到Alertmanager
+# 相关查询函数:
+  # absent: 若查询的参数无结果,返回1,表示异常
+  # up: 查询当前状态(metric up)
+  # job: prometheus内一系列相同的功能的实例集合
+  # rate: 计算区间向量v在时间窗口内平均增长速率
+  # irate: 用于计算区间向量的增长率，但是其反应出的是瞬时增长率
+  # increase: 获取区间向量中的第一个和最后一个样本并返回其增长量
+#
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: monitoring
+data:
+  # etcd 监控规则
+  # 参考: https://github.com/etcd-io/etcd/blob/master/Documentation/metrics.md
+  etcd3.rules.yaml: |
+    groups:
+    - name: etcd3.rules
+      rules:
+      # 监控etcd节点状态
+      - alert: EtcdNodeDown
+        expr: up{job="etcd"} == 0
+        for: 1m
+        labels:
+          severity: Critical
+          type: etcd
+        annotations:
+          description: "Node: {{$labels.instance}} etcd is unreachable for 3 minutes."
+      # 监控etcd集群是否丢失leader角色
+      - alert: EtcdNoLeader
+        expr: etcd_server_has_leader{job="etcd"} == 0
+        for: 1m
+        labels:
+          severity: Critical
+          type: etcd
+        annotations:
+          description: "etcd集群丢失leader角色超过1分钟. "
+      # etcd集群leader变更次数
+      - alert: EtcdHighNumberOfLeaderChanges
+        expr: increase(etcd_server_leader_changes_seen_total{job="etcd"}[1h]) > 3
+        for: 1h
+        labels:
+          severity: Critical
+          type: etcd
+        annotations:
+          description: "etcd集群在一个小时内leader角色变更超过3次."
+
+      # 获取不到etcd_http_failed_total数据
+      # - alert: EtcdHighNumberOfFailedHTTPRequests
+      #   expr: sum(rate(etcd_http_failed_total{job="etcd"}[5m])) BY (method) / sum(rate(etcd_http_received_total{job="etcd"}[5m]))
+      #     BY (method) > 0.05
+      #   for: 5m
+      #   labels:
+      #     severity: High
+      #     type: etcd
+      #   annotations:
+      #     description: '{{ $value }}% of requests for {{ $labels.method }} failed on etcd
+      #       instance {{ $labels.instance }}'
+
+  # 节点状态监控,通过node-export服务收集数据
+  # 当前节点metrics可通过http://hostip:9100/metrics查看
+  nodes.rules.yaml: |
+    groups:
+    - name: nodes_usage.rules
+      rules:
+      # 节点内存使用率
+      - alert: NodeMemoryUsageError
+        expr: |
+          (node_memory_MemTotal_bytes- (node_memory_MemFree_bytes + node_memory_Buffers_bytes + node_memory_Cached_bytes)) / node_memory_MemTotal_bytes* 100 > 80
+        for: 1m
+        labels:
+          severity: Warning
+          type: node
+        annotations:
+          description: "{{$labels.instance}}: Memory usage is above 80% (current value is:{{ $value }})"
+      # 节点cpu使用率
+      - alert: NodeCPUUsageError
+        expr: (100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 60
+        for: 1m
+        labels:
+          severity: High
+          type: node
+        annotations:
+          description: "{{$labels.instance}}: CPU usage is above 60% (current value is:{{ $value }})."
+
+  # kubelet服务监控
+  # 参考: https://github.com/kubernetes/kube-state-metrics/tree/master/docs
+  kubelet.rules.yaml: |
+    groups:
+    - name: kubelet.rules
+      rules:
+      # 节点kubelet服务是否down
+      - alert: KubeletDown
+        expr: up{job="kubelet"} == 0
+        for: 1m
+        labels:
+          severity: Critical
+          type: kubelet
+        annotations:
+          description: "Node: {{ $labels.kubernetes_io_hostname }} kubelet service is unreachable for 3 minutes."
+      # 查询节点上pod数量是否超过70
+      - alert: NodeTooManyPods
+        expr: kubelet_running_pod_count{job="kubelet"} > 70
+        for: 15m
+        labels:
+          severity: High
+          type: kubelet
+        annotations:
+          message: 'Node {{ $labels.kubernetes_io_hostname }} is running {{ $value }} Pods, the limit of 70.'
+
+  # ingress规则
+  ingress.rules.yaml: |
+    groups:
+    - name: ingress.rules
+      rules:
+      # 监控2分钟内ingress请求状态异常数是否大于20
+      - alert: IngressStatusError
+        expr: sum by (ingress) (rate(nginx_ingress_controller_requests{status=~"[4-5].*", ingress!=""}[2m])) > 20
+        for: 2m
+        labels:
+          severity: Warning
+        annotations:
+          description: "Ingress: {{ $labels.ingress }} 2分钟内HTTP状态异常数超过20. 当前异常数:{{ $value }}"
+
+  # kubernetes集群内部资源规则 
+  # 使用absent获取job状态,当job异常则表示集群内所有对应示例均无法服务
+  # 若单实例异常,一般为pod异常,pod监控会告警,未在此处单独监控实例
+  kubernetes.rules.yaml: |
+    groups:
+    - name: kubernetes-absent.rules
+      rules:
+      # 集群内部dns服务监控,较多内部组件依赖此服务
+      - alert: CoreDNSDown
+        annotations:
+          description: "CoreDNS is unreachable for 3 minutes."
+        expr: absent(up{job="kube-dns"} == 1)
+        for: 3m
+        labels:
+          severity: Critical
+          type: kuber
+      # kubernetes-apiservers监控,核心组件
+      - alert: KubeAPIDown
+        annotations:
+          description: "kubernetes-apiservers is unreachable for 3 minutes."
+        expr: absent(up{job="kubernetes-apiservers"} == 1)
+        for: 3m
+        labels:
+          severity: Critical
+          type: kuber
+      # kube-controller-manager
+      - alert: KubeControllerManagerDown
+        annotations:
+          description: "kube-controller-manager has unreachable from node: {{$labels.instance}} of 3 minutes."
+        expr: up{job="kube-controller-manager",service="kube-controller-manager"} < 1
+        for: 3m
+        labels:
+          severity: High
+          type: kuber
+      # kube-scheduler
+      - alert: KubeSchedulerDown
+        annotations:
+          description: "KubeScheduler has unreachable from node: {{$labels.instance}} of 3 minutes."
+        expr: up{job="kube-scheduler",service="kube-scheduler"} < 1
+        for: 3m
+        labels:
+          severity: High
+          type: kuber
+      # 内置在kubelet的集群数据收集服务
+      - alert: KubeStateMetricsDown
+        annotations:
+          description: "kube-state-metrics is unreachable for 3 minutes."
+        expr: up{job="kube-state-metrics"} < 1
+        for: 3m
+        labels:
+          severity: High
+          type: kuber
+      # 收集node节点数据
+      - alert: NodeExporterDown
+        annotations:
+          description: "NodeExporter is unreachable for 3 minutes from node: {{$labels.instance}} of 3 minutes."
+        expr: up{job="node-exporter"} < 1
+        for: 3m
+        labels:
+          severity: High
+          type: kuber
+    # 集群证书有效时间监控
+    - name: kubernetes-system.rules
+      rules:
+      - alert: KubeClientCertificateExpiration
+        expr: |
+          histogram_quantile(0.01, sum by (job, le) (rate(apiserver_client_certificate_expiration_seconds_bucket{job="kubernetes-apiservers"}[5m]))) < 604800
+        labels:
+          severity: Critical
+          type: kuber
+        annotations:
+          description: "Kubernetes API certificate is expiring in less than 7 days."
+
+  # pod状态监控
+  pods.rules.yaml: |
+    groups:          
+    - name: pod_usage.rules
+      rules:
+      # pod内存使用率
+      - alert: PodMemoryUsage
+        expr: (sum by (pod_name)(container_memory_usage_bytes{image!="", container_name!~"POD|prometheus", pod_name!=""}) / (1024^3) ) > 6
+        for: 3m
+        labels:
+          severity: High
+          type: pod
+        annotations:
+          description: "Pod: {{ $labels.pod_name }} 内存使用率大于5G, 目前使用率: {{ $value }}."
+      # pod网络流量
+      - alert: PodNetworkUsage
+        expr: sum(rate(container_network_receive_bytes_total{image!="",container_name!=""}[5m])) BY (pod_name)  / 1024^2 > 400
+        for: 5m
+        labels:
+          severity: High
+          type: pod
+        annotations:
+          description: "Pod: {{ $labels.pod_name }} 五分钟内网络流量大于400M, 目前使用率: {{ $value }}."
+      # pod cpu使用率,未找到好的计算方法
+      # - alert: PodCPUUsage
+      #   expr: sum by (pod_name)( rate(container_cpu_usage_seconds_total{image!="",container_name!="POD"}[3m])) * 100  > 70
+      #   for: 5m
+      #   labels:
+      #     severity: High
+      #   annotations:
+      #     description: "Pod: {{ $labels.pod_name }} 三分钟内平均CPU使用率大于70%, 目前使用率: {{ $value }}."
+    - name: pod_status.rules
+      rules:
+      # pod创建状态
+      - alert: PodCreateError
+        expr: kube_pod_container_status_waiting_reason{reason=~"|ErrImagePull|ImagePullBackOff|CreateContainerConfigError"} == 1
+        for: 3m
+        labels:
+          severity: Warning
+          type: pod
+        annotations:
+          description: 'Pod: {{ $labels.pod }} 创建异常, 异常原因: {{ $labels.reason }}.'
+      # pod运行状态
+      - alert: PodContainerTerminated
+        expr: kube_pod_container_status_terminated_reason{reason=~"OOMKilled|Error|ContainerCannotRun|CrashLoopBackOff"} > 0
+        for: 3m
+        labels:
+          severity: Warning
+          type: pod
+        annotations:
+          description: 'Pod: {{ $labels.pod }} 运行异常, 异常原因: {{ $labels.reason }}.'
+      # - alert: PodPhaseError
+      #   expr: sum by (namespace, pod) (kube_pod_status_phase{job="kube-state-metrics", phase=~"Failed|Pending|Unknown"}) > 0
+      #   for: 5m
+      #   labels:
+      #     severity: Warning
+      #   annotations:
+      #     message: 'Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in a non-ready state for longer than 5 minutes.'
+      # pod重启次数
+      - alert: pod_container_restart
+        expr: kube_pod_container_status_restarts_total{} > 5
+        for: 5m
+        labels:
+          severity: Warning
+          type: pod
+        annotations:
+          description: 'Pod: {{ $labels.pod }} 重启次数超过3次.'
+
+  # prometheus资源监控
+  prometheus.rules.yaml: |
+    groups:
+    - name: prometheus.rules
+      rules:
+      # 配置重载失败
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 3m
+        labels:
+          severity: Warning
+          type: prome
+        annotations:
+          description: "Reloading Prometheus' configuration has failed"
+      # 报警队列过载
+      - alert: PrometheusNotificationQueueRunningFull
+        expr: predict_linear(prometheus_notifications_queue_length[5m], 60 * 30) > prometheus_notifications_queue_capacity
+        for: 3m
+        labels:
+          severity: Warning
+          type: prome
+        annotations:
+          description: "Prometheus' alert notification queue is running full"
+      # tsbd数据reload异常
+      - alert: PrometheusTSDBReloadsFailing
+        expr: increase(prometheus_tsdb_reloads_failures_total[2h]) > 0
+        for: 12h
+        labels:
+          severity: Warning
+          type: prome
+        annotations:
+          description: '{{$labels.job}} at {{$labels.instance}} had {{$value | humanize}}
+            reload failures over the last four hours.'
+      # tsdb数据压缩失败
+      - alert: PrometheusTSDBCompactionsFailing
+        expr: increase(prometheus_tsdb_compactions_failed_total[2h]) > 0
+        for: 12h
+        labels:
+          severity: Warning
+          type: prome
+        annotations:
+          description: '{{$labels.job}} at {{$labels.instance}} had {{$value | humanize}}
+            compaction failures over the last four hours.'
