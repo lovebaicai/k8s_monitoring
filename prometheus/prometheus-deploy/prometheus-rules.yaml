@@ -265,7 +265,7 @@ data:
       #     message: 'Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in a non-ready state for longer than 5 minutes.'
       # pod重启次数
       - alert: pod_container_restart
-        expr: kube_pod_container_status_restarts_total{} > 5
+        expr: kube_pod_container_status_restarts_total{} > 3
         for: 5m
         labels:
           severity: Warning
