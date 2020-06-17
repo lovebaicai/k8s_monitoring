@@ -122,7 +122,7 @@ data:
       - target_label: endpoint
         replacement: kube-scheduler
 
-    - job_name: 'kubelet'
+    - job_name: 'kubernetes-nodes'
       kubernetes_sd_configs:
       - role: node
       scheme: https
