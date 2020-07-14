@@ -26,8 +26,8 @@ data:
       scheme: https
       tls_config:
         ca_file: /var/run/secrets/etcd-sercret/ca.pem
-        cert_file: /var/run/secrets/etcd-sercret/etcd.pem
-        key_file: /var/run/secrets/etcd-sercret/etcd-key.pem
+        cert_file: /var/run/secrets/etcd-secret/etcd.pem
+        key_file: /var/run/secrets/etcd-secret/etcd-key.pem
         insecure_skip_verify: false
       static_configs:
       - targets: ['172.16.43.11:2379','172.16.43.12:2379','172.16.43.13:2379']
