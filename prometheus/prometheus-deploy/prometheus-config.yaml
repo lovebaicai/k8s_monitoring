@@ -25,7 +25,7 @@ data:
     - job_name: 'etcd'
       scheme: https
       tls_config:
-        ca_file: /var/run/secrets/etcd-sercret/ca.pem
+        ca_file: /var/run/secrets/etcd-secret/ca.pem
         cert_file: /var/run/secrets/etcd-secret/etcd.pem
         key_file: /var/run/secrets/etcd-secret/etcd-key.pem
         insecure_skip_verify: false
